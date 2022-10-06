@@ -1,0 +1,16 @@
+[features]
+seeds = false
+skip-lint = false
+[programs.devnet]
+gif_portal_with_backend = "9KnwrsQdVbXdbhVaMpStSvYopMsCL6rAWNmaZcYYzvBg"
+
+[registry]
+url = "https://api.apr.dev/"
+
+[provider]
+cluster = "devnet"
+wallet = "/Users/erikmacinnis/.config/solana/id.json"
+
+# determine what node test will run 
+[scripts]
+test = "node tests/gif_portal_with_backend"
