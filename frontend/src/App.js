@@ -3,7 +3,11 @@ import {useEffect, useState} from 'react'
 import {Connection, PublicKey, clusterApiUrl} from "@solana/web3.js";
 import {Program, Provider, web3, utils, BN} from "@project-serum/anchor";
 import idl from "./idl.json"
-const network = clusterApiUrl("devnet")
+import kp from "./keypair.json"
+const arr = Object.values(kp._keypair.secretKey)
+const secret = new Uint8Array(arr)
+const baseAccount = web3.Keypair.fromSecretKey(secret)
+
 const programId = new PublicKey(idl.metadata.address)
 const opts = {
   // another option is "finalized"
@@ -13,26 +17,17 @@ const opts = {
 }
 const {SystemProgram} = web3
 
-const TEST_GIFS = [
-  "https://media.giphy.com/media/ZV6feeTgThqPyjEG5c/giphy.gif",
-  "https://media.giphy.com/media/HggxGlGAWFkbK/giphy.gif",
-  "https://media.giphy.com/media/MfmRTpIZWorO1UFvte/giphy.gif"
-]
-
 const App = () => {
 
   const [walletAddress, setWalletAddress] = useState(null)
   const [inputValue, setInputValue] = useState("")
-  const [gifList, setGifList] = useState([])
+  const [gifList, setGifList] = useState(null)
 
   useEffect(() => {
     if (walletAddress) {
       console.log("Fetching the GIF List...")
 
-      async function checkIfStartedAsyncAndSetGifListAsync(){
-        await checkIfStartedAsyncAndSetGifList()
-      }
-      checkIfStartedAsyncAndSetGifListAsync()
+      getGifList()
     }
   }, [walletAddress])
 
@@ -92,38 +87,66 @@ const App = () => {
     }
   }
 
-  const checkIfStartedAsyncAndSetGifList = async () => {
-    const connection = new Connection(network, opts.preflightCommitment)
-    const provider = getProvider()
-    const program = new Program(idl, programId, provider)
+  const getGifList = async() => {
+    try {
+      const provider = getProvider()
+      const program = new Program(idl, programId, provider)
+      const account = await program.account.baseAccount.fetch(baseAccount.publicKey)
 
-    const accounts = await connection.getProgramAccounts(programId)
-    const baseAccount = accounts[0]
-    console.log(baseAccount)
-    
-    const baseAccountData = await program.account.baseAccount.fetch(baseAccount.pubkey)
-
-    console.log(baseAccountData.totalGifs.toNumber())
-    console.log("gifList: ", baseAccountData.gifList)
-
-    if (baseAccountData.totalGifs.toNumber() === 1) {
-      console.log("It hasn't started yet")
-      await startOff()
+      console.log("Got the account: ", account)
+      setGifList(account.gifList)
+    } catch (error) {
+      console.log("Error in getGifList: ", error)
     }
-    
-    setGifList(baseAccountData.gifList)
+  }
+
+  const startStuffOff = async() => {
+    try {
+      const provider = getProvider()
+      const program = new Program(idl, programId, provider)
+      await program.rpc.startStuffOff({
+        accounts: {
+          baseAccount: baseAccount.publicKey,
+          user: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId
+        },
+        signers: [baseAccount]
+      })
+      console.log("Create a new BaseAccount w address: ", baseAccount.publicKey.toString())
+      await getGifList()
+    } catch(error) {
+      console.error("Error in createGifAccount: ", error)
+    }
   }
 
   const renderNotConnectedContainer = () => {
-    return <button onClick={connectWallet}>Connect to Wallet</button>
+    return (
+      <button 
+        className="cta-button connect-wallet-button" 
+        onClick={connectWallet}>
+        Connect to Wallet
+      </button>
+    )
   }
 
   const sendGif = async() => {
     if (inputValue.length > 0) {
       console.log("Gif Link: ", inputValue)
-      console.log(gifList.push(inputValue))
-      setGifList(gifList)
-      setInputValue("")
+      try {
+        const provider = getProvider()
+        const program = new Program(idl, programId, provider)
+        await program.rpc.addGif(inputValue, {
+          accounts: {
+            baseAccount: baseAccount.publicKey,
+            user: provider.wallet.publicKey
+          }
+        })
+        console.log("Gif sent to program: ", inputValue)
+        await getGifList()
+        setInputValue("")
+      } catch(err) {
+        console.error("Error in send gif: ", err)
+      }
     } else {
       console.log("Gif Link is empty")
     }
@@ -132,30 +155,6 @@ const App = () => {
   const onInputChange = event => {
     const {value} = event.target
     setInputValue(value)
-  }
-
-  const startOff = async () => {
-    try {
-      const provider = getProvider()
-      const program = new Program(idl, programId, provider)
-      const [baseAccount] = await PublicKey.findProgramAddress(
-        [],
-        program.programId
-      )
-      console.log(baseAccount)
-      console.log(program.rpc)
-      await program.rpc.startStuffOff({
-        accounts: {
-          baseAccount,
-          user: provider.wallet.publicKey,
-          systemProgram: SystemProgram.programId
-        },
-        singers: [baseAccount]
-      })
-      console.log("Created a new campaign w addres: ", baseAccount.toString())
-    } catch (err) {
-      console.error("Error In the starting off function: ", err)
-    }
   }
 
   // const addGif = () => {
@@ -183,42 +182,53 @@ const App = () => {
   // }
 
   const renderConnectedContainer = () => {
-    console.log("the gifList: ", gifList)
-    return (
-      <div className='connected-container'>
-        <form
-          onSubmit={event => {
-            event.preventDefault()
-            sendGif()
-          }}>
-            <input type="text" placeholder="Enter gif link!" onChange={
-              // We don't use the parentheses because we are just passing a reference to the input element
-              // When the input element is translated to pure react we don't want the function being called
-              onInputChange
-              }/>
-            <button type="submit" className="cta-button submit-gif-button">Submit</button>
-        </form>
-        <div className='gif-grid'>
-          {gifList.map( gif => (
-              <div className='gif-item' key={gif.gifLink}>
-                <img src={gif.gifLink} alt={gif.gifLink}></img>
-                <p>{gif.userAddress.toString()}</p>
-              </div>
-          ))}
+    if (gifList === null) {
+      console.log("Inside null gif list")
+      return (
+        <div className="connected-container">
+          <button className="cta-button submit-gif-button" onClick={startStuffOff}>
+            Do One-time initialization for Gif Program Account
+          </button>
         </div>
-      </div>
-    )
+      )
+    }
+    else {
+      return (
+        <div className='connected-container'>
+          <form
+            onSubmit={event => {
+              event.preventDefault()
+              sendGif()
+            }}>
+              <input type="text" placeholder="Enter gif link!" onChange={
+                // We don't use the parentheses because we are just passing a reference to the input element
+                // When the input element is translated to pure react we don't want the function being called
+                onInputChange
+                }/>
+              <button type="submit" className="cta-button submit-gif-button">Submit</button>
+          </form>
+          <div className='gif-grid'>
+            {gifList.slice(0).reverse().map((item, index) => (
+                <div className='gif-item' key={index}>
+                  <img src={item.gifLink} alt={item.gifLink}></img>
+                  <p>{item.userAddress.toString()}</p>
+                </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
   }
 
   return (
     <div className="App">
-      {!walletAddress && renderNotConnectedContainer()}
       <div className="container">
         <div className="header-container">
           <p className="header">🖼 GIF Portal</p>
           <p className="sub-text">
             View your GIF collection in the metaverse ✨
           </p>
+          {!walletAddress && renderNotConnectedContainer()}
           {walletAddress && renderConnectedContainer()}
         </div>
       </div>

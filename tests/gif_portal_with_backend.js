@@ -1,10 +1,16 @@
 const anchor = require("@project-serum/anchor");
+const {BN, web3} = require("@project-serum/anchor");
+const {Connection} = require("@solana/web3.js")
 
 const main = async() => {
   console.log("Starting Test")
   // to what env you have set in the Anchor Toml
   provider = anchor.AnchorProvider.env()
   anchor.setProvider(provider);
+
+  const rpcHost = "https://api.devnet.solana.com"
+  const connection = new Connection(rpcHost)
+
   const program = anchor.workspace.GifPortalWithBackend
 
   const baseAccount = anchor.web3.Keypair.generate()
@@ -37,7 +43,49 @@ const main = async() => {
   )
   console.log("Gif Count: ", account.totalGifs.toString())
 
-  console.log("Gif Link: ", account.gifList[0])
+  item = account.gifList[0]
+
+  console.log("Connection: ", connection)
+
+  let balance = await connection.getBalance(item.userAddress)
+  console.log("Balance before tip: ", balance)
+
+  console.log("Item: ", item)
+
+  const tipTx = await program.methods.tip(new BN(0.5 * web3.LAMPORTS_PER_SOL))
+  .accounts({
+    user: provider.wallet.publicKey,
+    owner: item.userAddress,
+    systemProgram: anchor.web3.SystemProgram.programId,
+  })
+  .rpc()
+
+  console.log("Money sent to: ", item.userAddress.toString(), " from: ", provider.wallet.publicKey.toString())
+  console.log("tip transaction signature: ", tipTx)
+
+  balance = await connection.getBalance(item.userAddress)
+  console.log("Balance after tip: ", balance)
+
+  console.log("Attempting to upvote")
+
+  console.log("gifLink param: ", item.gifLink)
+
+  await program.methods.upVote(item.gifLink)
+  .accounts({
+    baseAccount: baseAccount.publicKey,
+    user: provider.wallet.publicKey
+  })
+  .rpc()
+
+  account = await program.account.baseAccount.fetch(
+    baseAccount.publicKey
+  )
+  item = account.gifList[0]
+
+  console.log("item: ", item)
+  console.log("The number of upvotes should be one: ", item.upvotes.toNumber())
+  console.log("The upvoters should have one as well: ", item.upvoters[0].toString())
+
 }
 
 const runMain = async() => {

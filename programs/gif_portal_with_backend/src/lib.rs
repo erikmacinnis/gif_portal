@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::entrypoint::ProgramResult;
-
 declare_id!("9KnwrsQdVbXdbhVaMpStSvYopMsCL6rAWNmaZcYYzvBg");
 
 #[program]
@@ -19,13 +18,59 @@ pub mod gif_portal_with_backend {
 
         let item = ItemStruct {
             gif_link: gif_link,
-            user_address: *user.to_account_info().key
+            user_address: *user.to_account_info().key,
+            upvoters: Vec::new(),
+            upvotes: 0,
         };
 
         base_account.gif_list.push(item);
         base_account.total_gifs += 1;
         Ok(())
     }
+
+    pub fn tip(ctx: Context<Tip>, amount: u64) -> ProgramResult {
+        let instruction = anchor_lang::solana_program::system_instruction::transfer(
+            // to
+            &ctx.accounts.user.key(),  
+            //from
+            &ctx.accounts.owner.key(),
+            //amount
+            amount
+        );
+        anchor_lang::solana_program::program::invoke(
+            &instruction,
+            &[
+                ctx.accounts.user.to_account_info(),
+                ctx.accounts.owner.to_account_info(),
+            ]
+        )?;
+        Ok(())
+    }
+
+    pub fn up_vote(ctx: Context<Upvotes>, link: String) -> ProgramResult {
+        let base_account = &mut ctx.accounts.base_account;
+        let user = &mut ctx.accounts.user;
+
+        let gif_list = base_account.gif_list.clone();
+
+        let mut index = 0;
+        let mut found = false;
+        for mut item in gif_list {
+            if item.gif_link.eq(&link) && !item.upvoters.contains(&user.key()) {
+                item.upvoters.push(user.key());
+                item.upvotes += 1;
+                found = true;
+            } else {
+                index += 1;
+            }
+        }
+        if found {
+            base_account.gif_list[index].upvoters.push(user.key());
+            base_account.gif_list[index].upvotes += 1;
+        }
+        Ok(())
+    }
+
 }
 
 #[derive(Accounts)]
@@ -49,12 +94,32 @@ pub struct AddGif<'info> {
     pub user: Signer<'info>
 }
 
+#[derive(Accounts)]
+pub struct Tip<'info> {
+    #[account(mut)]
+    user: Signer<'info>,
+    #[account(mut)]
+    /// CHECK: This will be passed as a pubkey from the baseAccount field
+    owner: AccountInfo<'info>,
+    system_program: Program<'info, System>
+}
+
+#[derive(Accounts)]
+pub struct Upvotes<'info> {
+    #[account(mut)]
+    user: Signer<'info>,
+    #[account(mut)]
+    pub base_account: Account<'info, BaseAccount>,
+}
+
 // Debug and Clone specify that we can use those traits on this object
 // AnchorSerialize and AnchorDeserialize are instruction for the program to serialize the data
 #[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct ItemStruct {
     pub gif_link: String,
     pub user_address: Pubkey,
+    pub upvoters: Vec<Pubkey>,
+    pub upvotes: u64
 }
 
 #[account]
