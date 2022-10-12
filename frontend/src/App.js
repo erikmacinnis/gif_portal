@@ -1,6 +1,6 @@
 import './App.css';
 import {useEffect, useState} from 'react'
-import {Connection, PublicKey, clusterApiUrl} from "@solana/web3.js";
+import {Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL} from "@solana/web3.js";
 import {Program, Provider, web3, utils, BN} from "@project-serum/anchor";
 import idl from "./idl.json"
 import kp from "./keypair.json"
@@ -22,6 +22,12 @@ const App = () => {
   const [walletAddress, setWalletAddress] = useState(null)
   const [inputValue, setInputValue] = useState("")
   const [gifList, setGifList] = useState(null)
+  const [amount, setAmount] = useState('')
+
+  const handleChange = event => {
+    setAmount(event.target.value)
+    console.log('value is:', event.target.value);
+  }
 
   useEffect(() => {
     if (walletAddress) {
@@ -119,6 +125,51 @@ const App = () => {
     }
   }
 
+  const tip = async(event, pubkey) => {
+    try {
+      event.preventDefault()
+      console.log("value: ", amount)
+      console.log("address: ", pubkey.toString())
+      const tip = Number(amount)
+      if (isNaN(tip)) {
+        throw NaN
+      }
+      const provider = getProvider()
+      const program = new Program(idl, programId, provider)
+
+      const tx = await program.rpc.tip(new BN(tip * LAMPORTS_PER_SOL), {
+        accounts: {
+          owner: pubkey,
+          user: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId,
+        }
+      })
+
+      console.log("Send tx: ", tx)
+    } catch(err) {
+      console.log("Error adding tip: ", err)
+    }
+  }
+
+  const upVote = async(index) => {
+    try {
+      const provider = getProvider()
+      const program = new Program(idl, programId, provider)
+      const i = gifList.length - index - 1
+      console.log("Index: ", i)
+      await program.rpc.upVote(new BN(i), {
+        accounts: {
+          baseAccount: baseAccount.publicKey,
+          user: provider.wallet.publicKey,
+        }
+      })
+
+      console.log("Upvoted the gif")
+    } catch(err) {
+      console.log("Error upvoting: ", err)
+    }
+  }
+
   const renderNotConnectedContainer = () => {
     return (
       <button 
@@ -157,30 +208,6 @@ const App = () => {
     setInputValue(value)
   }
 
-  // const addGif = () => {
-  //   try {
-  //     const provider = getProvider()
-  //     const program = new Program(idl, programId, provider)
-  //     const [baseAccount] = await PublicKey.findProgramAddress(
-  //       [],
-  //       program.programId
-  //     )
-  //     console.log(baseAccount)
-  //     console.log(program.rpc)
-  //     await program.rpc.startStuffOff({
-  //       accounts: {
-  //         baseAccount,
-  //         user: provider.wallet.publicKey,
-  //         systemProgram: SystemProgram.programId
-  //       },
-  //       singers: [baseAccount]
-  //     })
-  //     console.log("Created a new campaign w addres: ", baseAccount.toString())
-  //   } catch (err) {
-  //     console.error("Error In the starting off function: ", err)
-  //   }
-  // }
-
   const renderConnectedContainer = () => {
     if (gifList === null) {
       console.log("Inside null gif list")
@@ -212,6 +239,15 @@ const App = () => {
                 <div className='gif-item' key={index}>
                   <img src={item.gifLink} alt={item.gifLink}></img>
                   <p>{item.userAddress.toString()}</p>
+                  <p>Number of Upvotes: {item.upvotes.toString()}</p>
+                  <form onSubmit={event => tip(event, item.userAddress)}>
+                    <label htlmfor="tip">Add a tip: </label>
+                    <input type="text" id="tip" name="tip" onChange={handleChange}></input>
+                    <input type="submit"></input>
+                  </form>
+                <button  onClick={() => upVote(index)}>
+                Upvote this Gif
+              </button>
                 </div>
             ))}
           </div>

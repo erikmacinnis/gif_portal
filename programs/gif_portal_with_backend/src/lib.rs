@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::entrypoint::ProgramResult;
+mod error;
 declare_id!("9KnwrsQdVbXdbhVaMpStSvYopMsCL6rAWNmaZcYYzvBg");
 
 #[program]
@@ -47,27 +48,41 @@ pub mod gif_portal_with_backend {
         Ok(())
     }
 
-    pub fn up_vote(ctx: Context<Upvotes>, link: String) -> ProgramResult {
+    pub fn up_vote(ctx: Context<Upvotes>, index: u64) -> Result<()> {
         let base_account = &mut ctx.accounts.base_account;
         let user = &mut ctx.accounts.user;
 
-        let gif_list = base_account.gif_list.clone();
+        // * this works but it has too many steps
+        // * It's def easier to find the index outside the SC then pass it */ */
+        // let gif_list = base_account.gif_list.clone();
 
-        let mut index = 0;
-        let mut found = false;
-        for mut item in gif_list {
-            if item.gif_link.eq(&link) && !item.upvoters.contains(&user.key()) {
-                item.upvoters.push(user.key());
-                item.upvotes += 1;
-                found = true;
-            } else {
-                index += 1;
-            }
-        }
-        if found {
-            base_account.gif_list[index].upvoters.push(user.key());
-            base_account.gif_list[index].upvotes += 1;
-        }
+        // let mut index = 0;
+        // let mut found = false;
+        // for mut item in gif_list {
+        //     if item.gif_link.eq(&link) && !item.upvoters.contains(&user.key()) {
+        //         item.upvoters.push(user.key());
+        //         item.upvotes += 1;
+        //         found = true;
+                    // break;
+        //     } else {
+        //         index += 1;
+        //     }
+        // }
+        // if found {
+        //     base_account.gif_list[index].upvoters.push(user.key());
+        //     base_account.gif_list[index].upvotes += 1;
+        // }
+
+        let index: usize = index as usize;
+
+        require!(
+            base_account.gif_list[index].upvoters[0..].contains(&user.key()),
+            error::ErrorCode::DoubleVoting
+        );
+
+        base_account.gif_list[index].upvoters.push(user.key());
+        base_account.gif_list[index].upvotes += 1;
+
         Ok(())
     }
 
@@ -107,9 +122,9 @@ pub struct Tip<'info> {
 #[derive(Accounts)]
 pub struct Upvotes<'info> {
     #[account(mut)]
-    user: Signer<'info>,
-    #[account(mut)]
     pub base_account: Account<'info, BaseAccount>,
+    #[account(mut)]
+    user: Signer<'info>,
 }
 
 // Debug and Clone specify that we can use those traits on this object

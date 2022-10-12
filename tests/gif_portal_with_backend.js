@@ -1,5 +1,6 @@
 const anchor = require("@project-serum/anchor");
 const {BN, web3} = require("@project-serum/anchor");
+const { SplTokenTypesCoder } = require("@project-serum/anchor/dist/cjs/coder/spl-token/types");
 const {Connection} = require("@solana/web3.js")
 
 const main = async() => {
@@ -45,7 +46,7 @@ const main = async() => {
 
   item = account.gifList[0]
 
-  console.log("Connection: ", connection)
+  console.log("GifLinks: ", account.gifList)
 
   let balance = await connection.getBalance(item.userAddress)
   console.log("Balance before tip: ", balance)
@@ -70,22 +71,36 @@ const main = async() => {
 
   console.log("gifLink param: ", item.gifLink)
 
-  await program.methods.upVote(item.gifLink)
+  index = 0;
+
+  const tx1 = await program.methods.upVote(new BN(0))
   .accounts({
     baseAccount: baseAccount.publicKey,
     user: provider.wallet.publicKey
   })
   .rpc()
 
+  console.log("Upvote signature: ", tx1)
+
+  setTimeout(function() {}, 20000)
+
   account = await program.account.baseAccount.fetch(
     baseAccount.publicKey
   )
-  item = account.gifList[0]
 
+  item = account.gifList[0]
   console.log("item: ", item)
   console.log("The number of upvotes should be one: ", item.upvotes.toNumber())
-  console.log("The upvoters should have one as well: ", item.upvoters[0].toString())
+  console.log("The upvoters should have one as well: ", item.upvoters[0])
 
+  account = await program.account.baseAccount.fetch(
+    baseAccount.publicKey
+  )
+  
+  item = account.gifList[0]
+  console.log("item: ", item)
+  console.log("The number of upvotes should be one: ", item.upvotes.toNumber())
+  console.log("The upvoters should have one as well: ", item.upvoters[0])
 }
 
 const runMain = async() => {
