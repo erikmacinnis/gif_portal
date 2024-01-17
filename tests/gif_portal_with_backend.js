@@ -96,6 +96,15 @@ const main = async() => {
   account = await program.account.baseAccount.fetch(
     baseAccount.publicKey
   )
+
+  const tx2 = await program.methods.upVote(new BN(0))
+  .accounts({
+    baseAccount: baseAccount.publicKey,
+    user: provider.wallet.publicKey
+  })
+  .rpc()
+
+  console.log("Upvote2 signature, should fail: ", tx1)
   
   item = account.gifList[0]
   console.log("item: ", item)

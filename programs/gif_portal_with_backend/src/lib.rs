@@ -8,7 +8,7 @@ pub mod gif_portal_with_backend {
     use super::*;
 
     pub fn start_stuff_off(ctx: Context<StartStuffOff>) -> ProgramResult {
-        let base_account = &mut ctx.accounts.base_account;
+        let base_account: &mut Account<'_, BaseAccount> = &mut ctx.accounts.base_account;
         base_account.total_gifs = 0;
         Ok(())
     }
@@ -51,8 +51,20 @@ pub mod gif_portal_with_backend {
     pub fn up_vote(ctx: Context<Upvotes>, index: u64) -> Result<()> {
         let base_account = &mut ctx.accounts.base_account;
         let user = &mut ctx.accounts.user;
+        let index: usize = index as usize;
 
-        // * this works but it has too many steps
+        // function will error out if the statement is false
+        require!(
+            !base_account.gif_list[index].upvoters[0..].contains(&user.key()),
+            error::ErrorCode::DoubleVoting
+        );
+
+        base_account.gif_list[index].upvoters.push(user.key());
+        base_account.gif_list[index].upvotes += 1;
+
+        Ok(())
+
+                // * this works but it has too many steps
         // * It's def easier to find the index outside the SC then pass it */ */
         // let gif_list = base_account.gif_list.clone();
 
@@ -72,27 +84,19 @@ pub mod gif_portal_with_backend {
         //     base_account.gif_list[index].upvoters.push(user.key());
         //     base_account.gif_list[index].upvotes += 1;
         // }
-
-        let index: usize = index as usize;
-
-        require!(
-            base_account.gif_list[index].upvoters[0..].contains(&user.key()),
-            error::ErrorCode::DoubleVoting
-        );
-
-        base_account.gif_list[index].upvoters.push(user.key());
-        base_account.gif_list[index].upvotes += 1;
-
-        Ok(())
     }
 
 }
 
 #[derive(Accounts)]
 pub struct StartStuffOff<'info> {
+    // init create new account owned by program
+    // payer for the account is the user
     #[account(init, payer=user, space=9000)]
     pub base_account: Account<'info, BaseAccount>,
 
+    // Proves to program that user owns his wallet
+    // mut means that this immutable
     #[account(mut)]
     pub user: Signer<'info>,
     // necessary for account creation or transfer when users is sending the program value
